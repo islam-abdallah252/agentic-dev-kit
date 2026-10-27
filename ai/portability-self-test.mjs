@@ -632,7 +632,7 @@ export function runPortabilitySelfTest(sourceRoot) {
         activeProfiles: [],
       }) + '\n'
     );
-    initOriginHead(customBaseRoot, 'main', 'feature');
+    initOriginHead(customBaseRoot, 'dev', 'feature');
     const customInstall = install({ sourceRoot, targetRoot: customBaseRoot });
     const customProfile = JSON.parse(
       fs.readFileSync(path.join(customBaseRoot, 'ai', 'project', 'profile.json'), 'utf8')
@@ -645,17 +645,114 @@ export function runPortabilitySelfTest(sourceRoot) {
     );
     check('reinstall-custom-base-action', customInstall.profileAction, 'left-existing');
 
-    const unknownKeptRoot = path.join(parent, 'unknown-base-reinstall');
-    write(
-      unknownKeptRoot,
-      'ai/project/profile.json',
-      JSON.stringify({ project: { name: 'kept-unknown' }, branch: { base: 'unknown' } }) + '\n'
-    );
-    initOriginHead(unknownKeptRoot, 'main', 'feature');
-    install({ sourceRoot, targetRoot: unknownKeptRoot });
+    const keepMainRoot = path.join(parent, 'keep-main-reinstall');
+    write(keepMainRoot, 'ai/project/profile.json', JSON.stringify({ branch: { base: 'main' } }) + '\n');
+    initOriginHead(keepMainRoot, 'dev', 'feature');
+    install({ sourceRoot, targetRoot: keepMainRoot });
     check(
-      'reinstall-does-not-fill-existing-unknown-base',
-      JSON.parse(fs.readFileSync(path.join(unknownKeptRoot, 'ai', 'project', 'profile.json'), 'utf8')).branch.base,
+      'reinstall-keeps-existing-main',
+      JSON.parse(fs.readFileSync(path.join(keepMainRoot, 'ai', 'project', 'profile.json'), 'utf8')).branch.base,
+      'main'
+    );
+
+    const refreshUnknownMainRoot = path.join(parent, 'refresh-unknown-main');
+    write(
+      refreshUnknownMainRoot,
+      'ai/project/profile.json',
+      JSON.stringify({
+        project: { name: 'kept-unknown', type: 'frontend-web' },
+        packageManager: 'npm',
+        tickets: { provider: 'none', required: false },
+        branch: {
+          base: 'unknown',
+          ticketlessFeature: 'feat/<short-kebab-summary>',
+          ticketlessBug: 'fix/<short-kebab-summary>',
+          ticketlessRefactor: 'refactor/<short-kebab-summary>',
+          ticketlessDocs: 'docs/<short-kebab-summary>',
+        },
+        activeProfiles: ['node'],
+      }) + '\n'
+    );
+    initOriginHead(refreshUnknownMainRoot, 'main', 'feature');
+    const refreshUnknownMain = install({ sourceRoot, targetRoot: refreshUnknownMainRoot });
+    const refreshedMainProfile = JSON.parse(
+      fs.readFileSync(path.join(refreshUnknownMainRoot, 'ai', 'project', 'profile.json'), 'utf8')
+    );
+    check('reinstall-unknown-origin-head-main', refreshedMainProfile.branch.base, 'main');
+    check('reinstall-unknown-origin-head-main-action', refreshUnknownMain.profileAction, 'refreshed-base');
+    check('reinstall-refresh-keeps-name', refreshedMainProfile.project.name, 'kept-unknown');
+    check('reinstall-refresh-keeps-type', refreshedMainProfile.project.type, 'frontend-web');
+    check('reinstall-refresh-keeps-manager', refreshedMainProfile.packageManager, 'npm');
+    check('reinstall-refresh-keeps-tickets', refreshedMainProfile.tickets.provider, 'none');
+    check('reinstall-refresh-keeps-active', JSON.stringify(refreshedMainProfile.activeProfiles), '["node"]');
+    check(
+      'reinstall-refresh-keeps-ticketless-feature',
+      refreshedMainProfile.branch.ticketlessFeature,
+      'feat/<short-kebab-summary>'
+    );
+    check(
+      'reinstall-refresh-keeps-ticketless-bug',
+      refreshedMainProfile.branch.ticketlessBug,
+      'fix/<short-kebab-summary>'
+    );
+    check(
+      'reinstall-refresh-keeps-ticketless-refactor',
+      refreshedMainProfile.branch.ticketlessRefactor,
+      'refactor/<short-kebab-summary>'
+    );
+    check(
+      'reinstall-refresh-keeps-ticketless-docs',
+      refreshedMainProfile.branch.ticketlessDocs,
+      'docs/<short-kebab-summary>'
+    );
+
+    const refreshUnknownDevRoot = path.join(parent, 'refresh-unknown-dev');
+    write(
+      refreshUnknownDevRoot,
+      'ai/project/profile.json',
+      JSON.stringify({ project: { name: 'kept-unknown-dev' }, branch: { base: 'unknown' } }) + '\n'
+    );
+    initOriginHead(refreshUnknownDevRoot, 'dev', 'feature');
+    const refreshUnknownDev = install({ sourceRoot, targetRoot: refreshUnknownDevRoot });
+    check(
+      'reinstall-unknown-origin-head-dev',
+      JSON.parse(fs.readFileSync(path.join(refreshUnknownDevRoot, 'ai', 'project', 'profile.json'), 'utf8')).branch
+        .base,
+      'dev'
+    );
+    check('reinstall-unknown-origin-head-dev-action', refreshUnknownDev.profileAction, 'refreshed-base');
+
+    const unknownMissingHeadRoot = path.join(parent, 'unknown-missing-origin-head');
+    write(
+      unknownMissingHeadRoot,
+      'ai/project/profile.json',
+      JSON.stringify({ project: { name: 'still-unknown' }, branch: { base: 'unknown' } }) + '\n'
+    );
+    git(unknownMissingHeadRoot, ['init', '-q']);
+    git(unknownMissingHeadRoot, ['commit', '--allow-empty', '-q', '-m', 'init']);
+    const unknownMissingHead = install({ sourceRoot, targetRoot: unknownMissingHeadRoot });
+    check(
+      'reinstall-unknown-missing-origin-head',
+      JSON.parse(fs.readFileSync(path.join(unknownMissingHeadRoot, 'ai', 'project', 'profile.json'), 'utf8')).branch
+        .base,
+      'unknown'
+    );
+    check('reinstall-unknown-missing-origin-head-action', unknownMissingHead.profileAction, 'left-existing');
+
+    const unknownInvalidHeadRoot = path.join(parent, 'unknown-invalid-origin-head');
+    write(
+      unknownInvalidHeadRoot,
+      'ai/project/profile.json',
+      JSON.stringify({ project: { name: 'still-unknown-invalid' }, branch: { base: 'unknown' } }) + '\n'
+    );
+    git(unknownInvalidHeadRoot, ['init', '-q']);
+    git(unknownInvalidHeadRoot, ['commit', '--allow-empty', '-q', '-m', 'init']);
+    git(unknownInvalidHeadRoot, ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/heads/main']);
+    install({ sourceRoot, targetRoot: unknownInvalidHeadRoot });
+    check(
+      'reinstall-unknown-invalid-origin-head',
+      JSON.parse(fs.readFileSync(path.join(unknownInvalidHeadRoot, 'ai', 'project', 'profile.json'), 'utf8')).branch
+        .base,
       'unknown'
     );
     const installedDiscovery = discover(installed);

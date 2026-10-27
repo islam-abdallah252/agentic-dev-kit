@@ -54,7 +54,7 @@ node ai/discovery/generate-profile.mjs --root .
 node ai/validate.mjs
 ```
 
-Then review and edit `ai/project/profile.json` and `ai/project/profile.md`. Those files are owned by the consumer project. Generation copies verified repository evidence only; it does not guess a tracker, commit convention, or technology profile. `branch.base` comes from the target `origin/HEAD` at install time, or stays `unknown`.
+Then review and edit `ai/project/profile.json` and `ai/project/profile.md`. Those files are owned by the consumer project. Generation copies verified repository evidence only; it does not guess a tracker, commit convention, or technology profile. `branch.base` comes from the target `origin/HEAD` at install time, or stays `unknown`. Reinstall fills `unknown` from `origin/HEAD` when that ref exists; any other value is left unchanged.
 
 ## What it is
 
@@ -76,7 +76,7 @@ Claude Code is not implemented in this version.
 - `rules/ticket-branch.md`
 - `.codex/agents/`
 - `.cursor/rules/` and `.cursor/agents/` generated from templates. Angular rules are written only when the matching **target** profile is active: `angular-typescript` → `angular-typescript.mdc`, `angular-html` → `ui-html.mdc`, `angular-scss` → `ui-scss.mdc`
-- a skeleton `ai/project/profile.json` only if that file is missing. `branch.base` is the target of `refs/remotes/origin/HEAD` when that ref exists; otherwise it is `unknown`. The current checkout is not used, and `main` is not a fallback.
+- a skeleton `ai/project/profile.json` only if that file is missing. `branch.base` is the target of `refs/remotes/origin/HEAD` when that ref exists; otherwise it is `unknown`. On reinstall, that field is updated only when it is exactly `unknown` and `origin/HEAD` now resolves. The current checkout is not used, and `main` is not a fallback.
 - a stub `ai/project/profile.md` only if that file is missing
 - `ai/install/conflict-report.json`
 
