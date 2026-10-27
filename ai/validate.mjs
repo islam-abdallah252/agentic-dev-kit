@@ -668,10 +668,22 @@ for (const file of scanFiles) {
 }
 
 const profile = loadProfile(root);
+const coreVersion = read('ai/CORE_VERSION').trim();
 if (!profile) {
   console.log('KIT SOURCE MODE: no consumer profile; skipping project-profile checks');
+  const pkgPath = path.join(root, 'package.json');
+  if (fs.existsSync(pkgPath)) {
+    try {
+      const pkgVersion = String(JSON.parse(read('package.json')).version ?? '').trim();
+      if (pkgVersion && pkgVersion !== coreVersion) {
+        fail('package.json version does not match ai/CORE_VERSION');
+      }
+    } catch (error) {
+      fail('unable to read package.json version: ' + String(error.message ?? error));
+    }
+  }
 } else {
-  const version = read('ai/CORE_VERSION').trim();
+  const version = coreVersion;
   if (profile.coreVersion !== version) fail('profile coreVersion does not match ai/CORE_VERSION');
   for (const key of ['project', 'packageManager', 'tickets', 'commits', 'branch', 'activeProfiles']) {
     if (profile[key] === undefined) fail('profile missing ' + key);

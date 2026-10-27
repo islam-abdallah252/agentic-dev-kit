@@ -61,7 +61,27 @@ function isMacMetadata(relative) {
   return base === '.DS_Store' || base.startsWith('._') || base === '.AppleDouble';
 }
 
-function copyEntry(sourceRoot, targetRoot, relative, conflicts) {
+function isKitOwnedPath(normalized) {
+  if (
+    excluded.has(normalized) ||
+    normalized.startsWith('ai/project/profile') ||
+    normalized.endsWith('discovery-report.json') ||
+    normalized.endsWith('conflict-report.json') ||
+    normalized === 'AGENTS.md' ||
+    normalized === '.cursor' ||
+    normalized.startsWith('.cursor/')
+  ) {
+    return false;
+  }
+  if (normalized === 'ai/project/SCHEMA.md') return true;
+  if (normalized.startsWith('ai/project/')) return false;
+  if (normalized === 'ai' || normalized.startsWith('ai/')) return true;
+  if (normalized === 'rules/ticket-branch.md') return true;
+  if (normalized === '.codex/agents' || normalized.startsWith('.codex/agents/')) return true;
+  return false;
+}
+
+function copyEntry(sourceRoot, targetRoot, relative, conflicts, updated, update) {
   if (excluded.has(relative.replace(/\\/g, '/'))) return;
   if (isMacMetadata(relative)) return;
   const from = path.join(sourceRoot, relative);
@@ -70,7 +90,7 @@ function copyEntry(sourceRoot, targetRoot, relative, conflicts) {
   const stat = fs.statSync(from);
   if (stat.isDirectory()) {
     for (const entry of fs.readdirSync(from)) {
-      copyEntry(sourceRoot, targetRoot, path.join(relative, entry), conflicts);
+      copyEntry(sourceRoot, targetRoot, path.join(relative, entry), conflicts, updated, update);
     }
     return;
   }
@@ -91,7 +111,36 @@ function copyEntry(sourceRoot, targetRoot, relative, conflicts) {
   const current = fs.readFileSync(to);
   const incoming = fs.readFileSync(from);
   if (current.equals(incoming)) return;
+  if (update && isKitOwnedPath(normalized)) {
+    fs.copyFileSync(from, to);
+    updated.push(normalized);
+    return;
+  }
   conflicts.push(normalized);
+}
+
+function collectObsolete(sourceRoot, targetRoot) {
+  const obsolete = [];
+  for (const relative of portablePaths) {
+    if (relative === 'AGENTS.md') continue;
+    collectObsoleteEntry(sourceRoot, targetRoot, relative, obsolete);
+  }
+  return obsolete;
+}
+
+function collectObsoleteEntry(sourceRoot, targetRoot, relative, obsolete) {
+  const to = path.join(targetRoot, relative);
+  if (!fs.existsSync(to) || isMacMetadata(relative)) return;
+  const stat = fs.statSync(to);
+  if (stat.isDirectory()) {
+    for (const entry of fs.readdirSync(to)) {
+      collectObsoleteEntry(sourceRoot, targetRoot, path.join(relative, entry), obsolete);
+    }
+    return;
+  }
+  const normalized = relative.replace(/\\/g, '/');
+  if (!isKitOwnedPath(normalized)) return;
+  if (!fs.existsSync(path.join(sourceRoot, normalized))) obsolete.push(normalized);
 }
 
 function materializeCursorAdapters(sourceRoot, targetRoot, conflicts, activeProfiles) {
@@ -154,7 +203,19 @@ export function skeletonProfile(version, base = 'unknown') {
 export const installerProfileDoc =
   '# Project profile\n\nMachine-readable values are in `ai/project/profile.json`.\n\nFill this file from a reviewed discovery report. Leave unknown facts unknown.\n';
 
-function readCoreVersion(sourceRoot, errors) {
+function readKitVersion(sourceRoot, errors) {
+  const pkgPath = path.join(sourceRoot, 'package.json');
+  if (fs.existsSync(pkgPath)) {
+    try {
+      const version = String(JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version ?? '').trim();
+      if (version) return version;
+    } catch (error) {
+      errors.push({
+        path: 'package.json',
+        message: 'unable to read package.json version: ' + String(error.message ?? error),
+      });
+    }
+  }
   try {
     const version = fs.readFileSync(path.join(sourceRoot, 'ai', 'CORE_VERSION'), 'utf8').trim();
     if (!version) {
@@ -171,14 +232,15 @@ function readCoreVersion(sourceRoot, errors) {
   }
 }
 
-export function install({ sourceRoot, targetRoot }) {
+export function install({ sourceRoot, targetRoot, update = false } = {}) {
   const conflicts = [];
   const errors = [];
+  const updated = [];
   const activeProfiles = readActiveProfiles(targetRoot);
   let copiedAngularProfiles = [];
   for (const relative of portablePaths) {
     try {
-      copyEntry(sourceRoot, targetRoot, relative, conflicts);
+      copyEntry(sourceRoot, targetRoot, relative, conflicts, updated, update);
     } catch (error) {
       errors.push({ path: relative.replace(/\\/g, '/'), message: String(error.message ?? error) });
     }
@@ -188,7 +250,7 @@ export function install({ sourceRoot, targetRoot }) {
   } catch (error) {
     errors.push({ path: '.cursor', message: String(error.message ?? error) });
   }
-  const version = readCoreVersion(sourceRoot, errors);
+  const version = readKitVersion(sourceRoot, errors);
   const profilePath = path.join(targetRoot, 'ai', 'project', 'profile.json');
   const profileDocPath = path.join(targetRoot, 'ai', 'project', 'profile.md');
   const branchBase = detectTargetBaseBranch(targetRoot);
@@ -197,14 +259,21 @@ export function install({ sourceRoot, targetRoot }) {
     fs.mkdirSync(path.dirname(profilePath), { recursive: true });
     fs.writeFileSync(profilePath, JSON.stringify(skeletonProfile(version, branchBase), null, 2) + '\n');
     profileAction = 'created-unknowns';
-  } else if (version && branchBase !== 'unknown' && fs.existsSync(profilePath)) {
+  } else if (fs.existsSync(profilePath)) {
     try {
       const existing = JSON.parse(fs.readFileSync(profilePath, 'utf8'));
-      if (existing?.branch?.base === 'unknown') {
+      let changed = false;
+      if (version && branchBase !== 'unknown' && existing?.branch?.base === 'unknown') {
         existing.branch.base = branchBase;
-        fs.writeFileSync(profilePath, JSON.stringify(existing, null, 2) + '\n');
+        changed = true;
         profileAction = 'refreshed-base';
       }
+      if (update && version && errors.length === 0 && conflicts.length === 0 && existing.coreVersion !== version) {
+        existing.coreVersion = version;
+        changed = true;
+        if (profileAction === 'left-existing') profileAction = 'refreshed-version';
+      }
+      if (changed) fs.writeFileSync(profilePath, JSON.stringify(existing, null, 2) + '\n');
     } catch {
       // leave a malformed profile unchanged
     }
@@ -218,6 +287,8 @@ export function install({ sourceRoot, targetRoot }) {
     coreVersion: version,
     conflicts,
     errors,
+    updated,
+    obsolete: collectObsolete(sourceRoot, targetRoot),
     profileAction,
     branchBase,
     overwritten: [],
@@ -283,12 +354,15 @@ function materializeCursorHook(root) {
 }
 
 function main() {
+  const update = process.argv.includes('--update');
+  const targetFlag = process.argv.indexOf('--target');
+  const hasTarget = targetFlag >= 0 && Boolean(process.argv[targetFlag + 1]);
+  if (update && !hasTarget) {
+    console.error('Usage: node ai/install/bootstrap.mjs --target <repository> --update');
+    process.exit(1);
+  }
   if (process.argv.includes('--materialize-cursor')) {
-    const targetFlag = process.argv.indexOf('--target');
-    const root =
-      targetFlag >= 0 && process.argv[targetFlag + 1]
-        ? path.resolve(process.argv[targetFlag + 1])
-        : process.cwd();
+    const root = hasTarget ? path.resolve(process.argv[targetFlag + 1]) : process.cwd();
     try {
       console.log(JSON.stringify({ materializeCursor: true, ...materializeCursorHook(root) }));
     } catch (error) {
@@ -297,9 +371,9 @@ function main() {
     }
     return;
   }
-  const targetFlag = process.argv.indexOf('--target');
-  if (targetFlag < 0 || !process.argv[targetFlag + 1]) {
+  if (!hasTarget) {
     console.error('Usage: node ai/install/bootstrap.mjs --target <repository>');
+    console.error('       node ai/install/bootstrap.mjs --target <repository> --update');
     console.error('       node ai/install/bootstrap.mjs --materialize-cursor');
     process.exit(1);
   }
@@ -310,11 +384,16 @@ function main() {
     console.error('Refusing to install onto the source repository.');
     process.exit(1);
   }
-  const report = install({ sourceRoot, targetRoot });
+  const report = install({ sourceRoot, targetRoot, update });
   console.log(JSON.stringify(report, null, 2));
   if (report.errors.length > 0) {
     for (const error of report.errors) {
       console.error('Bootstrap failed (exit 4): ' + error.path + ': ' + error.message);
+    }
+    if (report.updated.length > 0) {
+      console.error(
+        'Kit-owned files in updated were already replaced. There is no rollback. Retrying --update is safe for user-owned files.'
+      );
     }
     process.exit(4);
   }
@@ -324,6 +403,11 @@ function main() {
         report.conflicts.join(', ') +
         '. Merge them manually. Bootstrap never overwrites or auto-merges user-owned files.'
     );
+    if (report.updated.length > 0) {
+      console.error(
+        'Kit-owned files in updated were already replaced. There is no rollback. Retrying --update is safe for user-owned files.'
+      );
+    }
     if (report.conflicts.includes('AGENTS.md')) {
       console.error(
         'AGENTS.md conflict: merge the existing file so it still points at `ai/README.md`, `ai/core/lifecycle.md`, and Single-agent fallback. `node ai/validate.mjs` cannot pass until that merge is done.'
@@ -333,4 +417,10 @@ function main() {
   }
 }
 
-if (process.argv.includes('--target') || process.argv.includes('--materialize-cursor')) main();
+if (
+  process.argv.includes('--target') ||
+  process.argv.includes('--update') ||
+  process.argv.includes('--materialize-cursor')
+) {
+  main();
+}

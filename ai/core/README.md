@@ -13,4 +13,4 @@ Universal engineering policy lives here and in the two core files that keep thei
 
 Project facts live only in `ai/project/profile.json` and `ai/project/profile.md`. Technology rules live in `ai/profiles/` and apply only when `activeProfiles` lists them.
 
-The core version is `ai/CORE_VERSION`.
+The core version is `ai/CORE_VERSION`, which must match the kit `package.json` `version`.

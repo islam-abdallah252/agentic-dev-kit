@@ -2,7 +2,7 @@
 
 `ai/` is the portable engineering system for this repository. Tool folders do not define a second set of standards.
 
-Core version: see `ai/CORE_VERSION`.
+Core version: see `ai/CORE_VERSION`. The kit release version is the kit `package.json` `version`; those two values must match in this repository.
 
 ## Authority
 

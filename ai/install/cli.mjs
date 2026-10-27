@@ -15,8 +15,13 @@ if (args.includes('--source')) {
   console.error('Do not pass --source to the package entry point. The installed package is the source.');
   process.exit(1);
 }
+if (args.includes('--update') && !args.includes('--target')) {
+  console.error('Usage: npx --yes github:islam-abdallah252/agentic-dev-kit --target <repository> --update');
+  process.exit(1);
+}
 if (!args.includes('--target') && !args.includes('--materialize-cursor')) {
   console.error('Usage: npx --yes github:islam-abdallah252/agentic-dev-kit --target <repository>');
+  console.error('       npx --yes github:islam-abdallah252/agentic-dev-kit --target <repository> --update');
   console.error('       npx --yes github:islam-abdallah252/agentic-dev-kit --materialize-cursor');
   process.exit(1);
 }

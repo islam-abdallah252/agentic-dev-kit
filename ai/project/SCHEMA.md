@@ -5,7 +5,7 @@
 ## Required
 
 | Field | Meaning |
-| `coreVersion` | Must match `ai/CORE_VERSION` after an intentional upgrade. |
+| `coreVersion` | Installed kit version. Must match `ai/CORE_VERSION`. The kit release version lives in the kit `package.json`; `ai/CORE_VERSION` is the copy installed into a consumer. `--update` sets this field only after a conflict-free successful update. |
 | `project.name` | Repository or package name, or `unknown`. |
 | `project.type` | Short kind such as `frontend-web` or `library`, or `unknown`. |
 | `packageManager` | `npm`, `pnpm`, `yarn`, `poetry`, `pip`, `go`, `cargo`, `bundler`, `none`, or `unknown`. |

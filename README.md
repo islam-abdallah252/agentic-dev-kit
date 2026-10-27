@@ -32,6 +32,14 @@ Equivalent installer, from the kit clone:
 node ai/install/bootstrap.mjs --target /path/to/your-app
 ```
 
+Update an existing install (overwrites kit-owned files only):
+
+```bash
+npx --yes /path/to/agentic-dev-kit --target . --update
+```
+
+or `node ai/install/bootstrap.mjs --target /path/to/your-app --update`. `--update` without `--target` exits **1**.
+
 ### From GitHub (not yet available on origin)
 
 The intended command after `package.json` and `ai/install/cli.mjs` are on GitHub `main`:
@@ -80,7 +88,9 @@ Claude Code is not implemented in this version.
 - a stub `ai/project/profile.md` only if that file is missing
 - `ai/install/conflict-report.json`
 
-It does not overwrite differing files, does not delete user files, does not copy a source profile, and does not commit. The kit `package.json` is not copied into the consumer application.
+Without `--update`, it does not overwrite differing files. With `--update`, it overwrites kit-owned `ai/**` files (except profile/report paths), `rules/ticket-branch.md`, and `.codex/agents/**`. It never overwrites `AGENTS.md`, `.cursor/**`, `ai/project/profile.json`, `ai/project/profile.md`, application source, or the consumer `package.json`. Extra target files are never deleted; they may be listed as `obsolete`. It does not copy a source profile and does not commit. The kit `package.json` is not copied into the consumer application.
+
+The kit release version is `package.json` `version`. First install writes that value to `ai/CORE_VERSION` (copied) and to a new profile's `coreVersion`. `--update` sets `profile.coreVersion` only after a conflict-free successful update.
 
 ## Discovery, profile generation, and validation
 
@@ -128,13 +138,15 @@ Full installer contract: `ai/install/README.md` and `ai/install/QUICKSTART.md`. 
 
 ## Conflicts
 
-If a destination file already exists and its bytes differ, the installer leaves it unchanged, writes `ai/install/conflict-report.json`, and exits **3**. It never overwrites or auto-merges a user-owned file, including `AGENTS.md`.
+If a destination file already exists and its bytes differ, a normal install leaves it unchanged, writes `ai/install/conflict-report.json`, and exits **3**. It never overwrites or auto-merges a user-owned file, including `AGENTS.md`.
+
+With `--update`, kit-owned differing files are replaced and listed in `updated` even if the run later hits a user-owned conflict or a copy error. `profile.coreVersion` is not bumped in that case. There is no rollback. Retrying `--update` after you merge conflicts is safe for user-owned files.
 
 Validation requires `AGENTS.md` to point at `ai/README.md`, `ai/core/lifecycle.md`, and Single-agent fallback. If the installer reports an `AGENTS.md` conflict, merge that file by hand before `node ai/validate.mjs` can pass.
 
-Exit **4** means a copy failed or `ai/CORE_VERSION` could not be read. Earlier files stay; there is no rollback.
+Exit **4** means a copy failed or `ai/CORE_VERSION` could not be read. Kit-owned files already listed in `updated` stay replaced; there is no rollback.
 
-Exit **1** means the command was invoked without `--target` (or `--materialize-cursor`), with `--source`, or on Node.js older than 18.
+Exit **1** means the command was invoked without `--target` (or `--materialize-cursor`), with `--update` and no `--target`, with `--source`, or on Node.js older than 18.
 
 ## How to validate this kit
 
@@ -150,7 +162,7 @@ node ai/validate.mjs --self-test
 ## Current limitations
 
 - No Claude Code adapter.
-- No dedicated update CLI; re-run the installer, then bump `profile.coreVersion` by hand after accepting an update.
+- `--update` does not auto-delete files removed upstream; review `report.obsolete`.
 - Cursor file-scoped globs assume `src/**` for Angular templates.
 - The branch guard is Cursor-hook specific (`CURSOR_PROJECT_DIR` or cwd) and must be materialized separately with `--materialize-cursor`.
 - Commit and push approval remain agent policy, not Git hooks.

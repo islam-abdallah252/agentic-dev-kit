@@ -38,14 +38,28 @@ Exit code 4 means a copy failed or `ai/CORE_VERSION` could not be read. Earlier 
 
 ## Updates
 
-Run the same command. It copies portable files that are missing or identical, and it will not replace a project profile. Compare `ai/CORE_VERSION` with `profile.coreVersion` after you accept an update, then set `profile.coreVersion` yourself when you want the profile to declare that version.
+Normal reinstall copies missing files, skips identical files, and reports differing files as conflicts. It does not replace customized kit files.
+
+To apply a newer kit to an existing install:
+
+```bash
+npx --yes github:islam-abdallah252/agentic-dev-kit --target . --update
+```
+
+or, from a local clone:
+
+```bash
+node ai/install/bootstrap.mjs --target /path/to/your-app --update
+```
+
+`--target` is required. `--update` overwrites kit-owned files that differ, copies missing kit files, and leaves `AGENTS.md`, `.cursor/**`, and the project profile for manual conflict resolution. Extra files in the target are never deleted. `profile.coreVersion` is updated to the kit `package.json` version only if the run has no copy errors and no unresolved conflicts. Other profile fields are left unchanged. The consumer `package.json` is never modified. If the run exits 3 or 4, kit-owned files already listed in `updated` stay replaced; retry `--update` after resolving conflicts. User-owned files are not overwritten on retry.
 
 Commit approval, push approval, and profile edits stay manual. Bootstrap does not commit.
 
 ## Current limitations
 
 - No Claude Code adapter.
-- No dedicated update CLI; re-run bootstrap, then bump `profile.coreVersion` by hand after accepting an update.
+- Removed upstream kit files are reported in `obsolete` and must be deleted by hand.
 - Cursor file-scoped globs assume `src/**` for Angular templates.
 - The branch guard is Cursor-hook specific (`CURSOR_PROJECT_DIR` or cwd) and must be materialized separately with `--materialize-cursor`.
 - Commit and push approval remain agent policy, not Git hooks.

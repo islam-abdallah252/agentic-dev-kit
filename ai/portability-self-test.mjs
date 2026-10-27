@@ -86,6 +86,7 @@ const noTicketProfile = {
 
 export function runPortabilitySelfTest(sourceRoot) {
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-portability-'));
+  const kitVersion = JSON.parse(fs.readFileSync(path.join(sourceRoot, 'package.json'), 'utf8')).version;
   let failed = false;
 
   function check(name, actual, expected) {
@@ -545,6 +546,7 @@ export function runPortabilitySelfTest(sourceRoot) {
     check('bootstrap-writes-unknown-profile', installedProfile.tickets.provider, 'unknown');
     check('bootstrap-does-not-copy-source-base', installedProfile.branch.base, 'unknown');
     check('bootstrap-does-not-copy-source-name', installedProfile.project.name, 'unknown');
+    check('bootstrap-writes-kit-version', installedProfile.coreVersion, kitVersion);
     check('no-angular-profiles-report', JSON.stringify(clean.angularCursorRulesCopied), '[]');
     check(
       'no-angular-profiles-omits-typescript-rule',
@@ -577,6 +579,7 @@ export function runPortabilitySelfTest(sourceRoot) {
     check('repeated-install-has-no-copy-errors', repeated.errors.length, 0);
     check('repeated-install-keeps-unknown-base', repeatedProfile.branch.base, 'unknown');
     check('repeated-install-leaves-existing-profile', repeated.profileAction, 'left-existing');
+    check('repeated-install-has-no-updates', JSON.stringify(repeated.updated), '[]');
 
     const originMainRoot = path.join(parent, 'origin-head-main');
     write(originMainRoot, 'README.md', '# app\n');
@@ -795,6 +798,223 @@ export function runPortabilitySelfTest(sourceRoot) {
       { encoding: 'utf8' }
     );
     check('cli-rejects-source-flag', cliSourceRejected.status ?? 0, 1);
+    const updateWithoutTarget = spawnSync(
+      process.execPath,
+      [path.join(sourceRoot, 'ai', 'install', 'bootstrap.mjs'), '--update'],
+      { encoding: 'utf8' }
+    );
+    check('update-without-target-exit', updateWithoutTarget.status ?? 0, 1);
+    const cliUpdateWithoutTarget = spawnSync(
+      process.execPath,
+      [path.join(sourceRoot, 'ai', 'install', 'cli.mjs'), '--update'],
+      { encoding: 'utf8' }
+    );
+    check('cli-update-without-target-exit', cliUpdateWithoutTarget.status ?? 0, 1);
+
+    const updateRoot = path.join(parent, 'update-target');
+    write(updateRoot, 'src/app.ts', 'export const app = 1;\n');
+    write(updateRoot, 'package.json', JSON.stringify({ name: 'consumer-app', version: '9.9.9' }) + '\n');
+    const firstUpdateInstall = install({ sourceRoot, targetRoot: updateRoot });
+    check('update-first-install-exit-conflicts', firstUpdateInstall.conflicts.length, 0);
+    write(updateRoot, 'ai/core/lifecycle.md', 'stale kit file\n');
+    write(updateRoot, 'ai/project/profile.md', 'custom profile doc\n');
+    write(updateRoot, 'ai/rules/local-extra.md', 'consumer extra rule\n');
+    const updateCustomProfile = {
+      coreVersion: '1.1.0',
+      project: { name: 'consumer-app', type: 'library' },
+      packageManager: 'npm',
+      tickets: { provider: 'none', required: false },
+      commits: { convention: 'unknown', ticketRequired: 'unknown', headerPattern: '' },
+      branch: {
+        base: 'release',
+        ticketlessFeature: 'feat/<short-kebab-summary>',
+      },
+      activeProfiles: ['node'],
+    };
+    write(updateRoot, 'ai/project/profile.json', JSON.stringify(updateCustomProfile, null, 2) + '\n');
+    const staleLifecycle = fs.readFileSync(path.join(updateRoot, 'ai', 'core', 'lifecycle.md'), 'utf8');
+    const noUpdate = install({ sourceRoot, targetRoot: updateRoot });
+    check('install-does-not-overwrite-kit-file', noUpdate.conflicts.includes('ai/core/lifecycle.md'), true);
+    check(
+      'install-keeps-stale-kit-file',
+      fs.readFileSync(path.join(updateRoot, 'ai', 'core', 'lifecycle.md'), 'utf8'),
+      staleLifecycle
+    );
+    fs.rmSync(path.join(updateRoot, 'ai', 'README.md'));
+    fs.writeFileSync(path.join(updateRoot, '.cursor', 'rules', 'git-and-delivery.mdc'), 'custom cursor rule\n');
+    write(updateRoot, 'AGENTS.md', '# Consumer agents\nDo not replace.\n');
+    const updatedRun = install({ sourceRoot, targetRoot: updateRoot, update: true });
+    check('update-overwrites-kit-file', updatedRun.updated.includes('ai/core/lifecycle.md'), true);
+    check(
+      'update-restores-kit-file',
+      fs.readFileSync(path.join(updateRoot, 'ai', 'core', 'lifecycle.md'), 'utf8').includes('Single-agent fallback'),
+      true
+    );
+    check('update-copies-missing-kit-file', fs.existsSync(path.join(updateRoot, 'ai', 'README.md')), true);
+    check('update-identical-not-listed', updatedRun.updated.includes('ai/CORE_VERSION'), false);
+    check('update-conflicts-agents', updatedRun.conflicts.includes('AGENTS.md'), true);
+    check('update-conflicts-cursor', updatedRun.conflicts.includes('.cursor/rules/git-and-delivery.mdc'), true);
+    check(
+      'update-keeps-agents',
+      fs.readFileSync(path.join(updateRoot, 'AGENTS.md'), 'utf8').includes('Do not replace.'),
+      true
+    );
+    check(
+      'update-keeps-cursor',
+      fs.readFileSync(path.join(updateRoot, '.cursor', 'rules', 'git-and-delivery.mdc'), 'utf8'),
+      'custom cursor rule\n'
+    );
+    const afterConflictProfile = JSON.parse(
+      fs.readFileSync(path.join(updateRoot, 'ai', 'project', 'profile.json'), 'utf8')
+    );
+    check('update-conflict-does-not-bump-core-version', afterConflictProfile.coreVersion, '1.1.0');
+    check('update-conflict-keeps-profile-name', afterConflictProfile.project.name, 'consumer-app');
+    check('update-conflict-keeps-base', afterConflictProfile.branch.base, 'release');
+    check(
+      'update-conflict-keeps-ticketless',
+      afterConflictProfile.branch.ticketlessFeature,
+      'feat/<short-kebab-summary>'
+    );
+    check(
+      'update-keeps-custom-profile-md',
+      fs.readFileSync(path.join(updateRoot, 'ai', 'project', 'profile.md'), 'utf8'),
+      'custom profile doc\n'
+    );
+    check('update-keeps-src', fs.readFileSync(path.join(updateRoot, 'src', 'app.ts'), 'utf8'), 'export const app = 1;\n');
+    check(
+      'update-keeps-consumer-package',
+      fs.readFileSync(path.join(updateRoot, 'package.json'), 'utf8'),
+      JSON.stringify({ name: 'consumer-app', version: '9.9.9' }) + '\n'
+    );
+    check('update-never-deletes-extra', fs.existsSync(path.join(updateRoot, 'ai', 'rules', 'local-extra.md')), true);
+    check('update-reports-obsolete', updatedRun.obsolete.includes('ai/rules/local-extra.md'), true);
+    const retryUpdate = install({ sourceRoot, targetRoot: updateRoot, update: true });
+    check('update-retry-keeps-agents', fs.readFileSync(path.join(updateRoot, 'AGENTS.md'), 'utf8').includes('Do not replace.'), true);
+    check(
+      'update-retry-keeps-core-version',
+      JSON.parse(fs.readFileSync(path.join(updateRoot, 'ai', 'project', 'profile.json'), 'utf8')).coreVersion,
+      '1.1.0'
+    );
+    check('update-retry-still-conflicts-agents', retryUpdate.conflicts.includes('AGENTS.md'), true);
+
+    const updateConflictCliRoot = path.join(parent, 'update-conflict-cli');
+    install({ sourceRoot, targetRoot: updateConflictCliRoot });
+    write(updateConflictCliRoot, 'ai/core/lifecycle.md', 'stale\n');
+    write(updateConflictCliRoot, 'AGENTS.md', '# Keep\n');
+    const conflictCliProfile = JSON.parse(
+      fs.readFileSync(path.join(updateConflictCliRoot, 'ai', 'project', 'profile.json'), 'utf8')
+    );
+    conflictCliProfile.coreVersion = '1.1.0';
+    write(updateConflictCliRoot, 'ai/project/profile.json', JSON.stringify(conflictCliProfile, null, 2) + '\n');
+    const updateConflictCli = spawnSync(
+      process.execPath,
+      [
+        path.join(sourceRoot, 'ai', 'install', 'bootstrap.mjs'),
+        '--source',
+        sourceRoot,
+        '--target',
+        updateConflictCliRoot,
+        '--update',
+      ],
+      { encoding: 'utf8' }
+    );
+    check('update-conflict-cli-exit', updateConflictCli.status, 3);
+    check(
+      'update-conflict-cli-explains-partial',
+      (updateConflictCli.stdout + updateConflictCli.stderr).includes('Kit-owned files in updated were already replaced'),
+      true
+    );
+    check(
+      'update-conflict-cli-keeps-core-version',
+      JSON.parse(fs.readFileSync(path.join(updateConflictCliRoot, 'ai', 'project', 'profile.json'), 'utf8'))
+        .coreVersion,
+      '1.1.0'
+    );
+
+    const successUpdateRoot = path.join(parent, 'update-success');
+    install({ sourceRoot, targetRoot: successUpdateRoot });
+    write(successUpdateRoot, 'ai/core/lifecycle.md', 'stale\n');
+    const successProfile = JSON.parse(
+      fs.readFileSync(path.join(successUpdateRoot, 'ai', 'project', 'profile.json'), 'utf8')
+    );
+    successProfile.coreVersion = '1.1.0';
+    successProfile.project.name = 'kept-on-success';
+    write(successUpdateRoot, 'ai/project/profile.json', JSON.stringify(successProfile, null, 2) + '\n');
+    const successUpdate = install({ sourceRoot, targetRoot: successUpdateRoot, update: true });
+    const successAfter = JSON.parse(
+      fs.readFileSync(path.join(successUpdateRoot, 'ai', 'project', 'profile.json'), 'utf8')
+    );
+    check('update-success-overwrites-kit-file', successUpdate.updated.includes('ai/core/lifecycle.md'), true);
+    check('update-success-no-conflicts', successUpdate.conflicts.length, 0);
+    check('update-success-bumps-core-version', successAfter.coreVersion, kitVersion);
+    check('update-success-keeps-name', successAfter.project.name, 'kept-on-success');
+
+    const updateFailRoot = path.join(parent, 'update-copy-fail');
+    install({ sourceRoot, targetRoot: updateFailRoot });
+    const failProfile = JSON.parse(
+      fs.readFileSync(path.join(updateFailRoot, 'ai', 'project', 'profile.json'), 'utf8')
+    );
+    failProfile.coreVersion = '1.1.0';
+    failProfile.project.name = 'kept-on-fail';
+    write(updateFailRoot, 'ai/project/profile.json', JSON.stringify(failProfile, null, 2) + '\n');
+    fs.rmSync(path.join(updateFailRoot, 'ai', 'README.md'));
+    fs.mkdirSync(path.join(updateFailRoot, 'ai', 'README.md'));
+    const failUpdate = install({ sourceRoot, targetRoot: updateFailRoot, update: true });
+    const failAfter = JSON.parse(
+      fs.readFileSync(path.join(updateFailRoot, 'ai', 'project', 'profile.json'), 'utf8')
+    );
+    check('update-copy-failure-reports-error', failUpdate.errors.length > 0, true);
+    check('update-copy-failure-does-not-bump-core-version', failAfter.coreVersion, '1.1.0');
+    check('update-copy-failure-keeps-name', failAfter.project.name, 'kept-on-fail');
+
+    const partialFailRoot = path.join(parent, 'update-partial-copy-fail');
+    install({ sourceRoot, targetRoot: partialFailRoot });
+    write(partialFailRoot, 'ai/core/lifecycle.md', 'stale\n');
+    const partialFailProfile = JSON.parse(
+      fs.readFileSync(path.join(partialFailRoot, 'ai', 'project', 'profile.json'), 'utf8')
+    );
+    partialFailProfile.coreVersion = '1.1.0';
+    partialFailProfile.project.name = 'kept-on-partial-fail';
+    write(partialFailRoot, 'ai/project/profile.json', JSON.stringify(partialFailProfile, null, 2) + '\n');
+    fs.rmSync(path.join(partialFailRoot, 'ai', 'lib'), { recursive: true, force: true });
+    fs.writeFileSync(path.join(partialFailRoot, 'ai', 'lib'), 'not-a-directory');
+    const partialFailUpdate = install({ sourceRoot, targetRoot: partialFailRoot, update: true });
+    const partialFailAfter = JSON.parse(
+      fs.readFileSync(path.join(partialFailRoot, 'ai', 'project', 'profile.json'), 'utf8')
+    );
+    check('update-partial-fail-updated-kit-file', partialFailUpdate.updated.includes('ai/core/lifecycle.md'), true);
+    check('update-partial-fail-reports-error', partialFailUpdate.errors.length > 0, true);
+    check('update-partial-fail-does-not-bump-core-version', partialFailAfter.coreVersion, '1.1.0');
+    check('update-partial-fail-keeps-name', partialFailAfter.project.name, 'kept-on-partial-fail');
+
+    const partialFailCliRoot = path.join(parent, 'update-partial-copy-fail-cli');
+    install({ sourceRoot, targetRoot: partialFailCliRoot });
+    write(partialFailCliRoot, 'ai/core/lifecycle.md', 'stale\n');
+    const partialFailCliProfile = JSON.parse(
+      fs.readFileSync(path.join(partialFailCliRoot, 'ai', 'project', 'profile.json'), 'utf8')
+    );
+    partialFailCliProfile.coreVersion = '1.1.0';
+    write(partialFailCliRoot, 'ai/project/profile.json', JSON.stringify(partialFailCliProfile, null, 2) + '\n');
+    fs.rmSync(path.join(partialFailCliRoot, 'ai', 'lib'), { recursive: true, force: true });
+    fs.writeFileSync(path.join(partialFailCliRoot, 'ai', 'lib'), 'not-a-directory');
+    const partialFailCli = spawnSync(
+      process.execPath,
+      [
+        path.join(sourceRoot, 'ai', 'install', 'bootstrap.mjs'),
+        '--source',
+        sourceRoot,
+        '--target',
+        partialFailCliRoot,
+        '--update',
+      ],
+      { encoding: 'utf8' }
+    );
+    check('update-partial-fail-cli-exit', partialFailCli.status, 4);
+    check(
+      'update-partial-fail-cli-explains-partial',
+      (partialFailCli.stdout + partialFailCli.stderr).includes('Kit-owned files in updated were already replaced'),
+      true
+    );
 
     const nodeProfileRoot = path.join(parent, 'node-profile');
     write(
