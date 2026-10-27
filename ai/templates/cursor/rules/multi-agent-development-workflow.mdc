@@ -1,0 +1,6 @@
+---
+description: Loads the canonical development lifecycle
+alwaysApply: true
+---
+
+Read `ai/core/lifecycle.md` before the first application edit. This file is a Cursor adapter. Do not add a second lifecycle here.

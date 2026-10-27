@@ -1,0 +1,6 @@
+---
+description: Loads the canonical minimal-implementation policy
+alwaysApply: true
+---
+
+Read `ai/rules/minimal-implementation.md` before implementing, reviewing, or testing. This file is a Cursor adapter. Do not add engineering requirements here.

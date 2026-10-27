@@ -1,0 +1,6 @@
+---
+description: Loads the issue-tracker procedure before branch preparation
+alwaysApply: true
+---
+
+Read `ai/core/issue-tracker.md` before preparing a branch. Ticket and branch values come from `ai/project/profile.json`. This file is a Cursor adapter. Do not add a second procedure here.

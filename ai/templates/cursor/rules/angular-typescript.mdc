@@ -1,0 +1,7 @@
+---
+description: Loads the Angular TypeScript profile for TypeScript sources
+globs: src/**/*.ts
+alwaysApply: false
+---
+
+Read `ai/profiles/angular-typescript.md` before editing matching files. Apply it only when `ai/project/profile.json` lists `angular-typescript`. This file is a Cursor adapter.

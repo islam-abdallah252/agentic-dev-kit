@@ -1,0 +1,7 @@
+name = "code-reviewer"
+description = "Independently reviews a completed diff. Use only after implementation is finished."
+sandbox_mode = "read-only"
+
+developer_instructions = """
+Follow `ai/agents/code-reviewer.md` and `ai/core/lifecycle.md`. This file is a Codex adapter. Do not add engineering requirements here. Do not edit files.
+"""

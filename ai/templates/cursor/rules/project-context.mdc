@@ -1,0 +1,6 @@
+---
+description: Loads the project context pointer before application edits
+alwaysApply: true
+---
+
+Read `ai/rules/project-context.md` before the first application edit. This file is a Cursor adapter. Do not add engineering requirements here.

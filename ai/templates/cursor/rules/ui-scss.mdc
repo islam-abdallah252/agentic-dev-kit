@@ -1,0 +1,7 @@
+---
+description: Loads the Angular SCSS profile for stylesheets
+globs: src/**/*.scss
+alwaysApply: false
+---
+
+Read `ai/profiles/angular-scss.md` before editing matching files. Apply it only when `ai/project/profile.json` lists `angular-scss`. This file is a Cursor adapter.

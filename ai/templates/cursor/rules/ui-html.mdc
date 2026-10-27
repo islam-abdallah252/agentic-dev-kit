@@ -1,0 +1,7 @@
+---
+description: Loads the Angular HTML profile for templates
+globs: src/**/*.html
+alwaysApply: false
+---
+
+Read `ai/profiles/angular-html.md` before editing matching files. Apply it only when `ai/project/profile.json` lists `angular-html`. This file is a Cursor adapter.

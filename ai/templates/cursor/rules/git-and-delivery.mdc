@@ -1,0 +1,6 @@
+---
+description: Loads the canonical commit and delivery policy
+alwaysApply: true
+---
+
+Read `ai/rules/git-and-delivery.md` before staging or committing. This file is a Cursor adapter. Do not restate or weaken that policy here.

@@ -1,0 +1,7 @@
+---
+description: Loads the testing and quality rule for specs
+globs: "**/*.spec.ts"
+alwaysApply: false
+---
+
+Read `ai/rules/testing-and-quality.md` and `ai/core/evidence.md` before changing or running checks for matching specs. This file is a Cursor adapter.
