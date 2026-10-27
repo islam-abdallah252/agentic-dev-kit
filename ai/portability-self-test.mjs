@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import { discover } from './discovery/discover.mjs';
+import { generateProfile } from './discovery/generate-profile.mjs';
 import { install } from './install/bootstrap.mjs';
 import {
   adapterStatesApprovalHardLock,
@@ -571,6 +572,129 @@ export function runPortabilitySelfTest(sourceRoot) {
         .slice(0, 8);
       for (const line of relevant) console.log('  ' + line);
     }
+
+    const cliTarget = path.join(parent, 'cli-target');
+    fs.mkdirSync(cliTarget);
+    const cliRun = spawnSync(process.execPath, [path.join(sourceRoot, 'ai', 'install', 'cli.mjs'), '--target', cliTarget], {
+      encoding: 'utf8',
+    });
+    check('cli-install-exit', cliRun.status ?? 1, 0);
+    check(
+      'cli-install-creates-profile',
+      fs.existsSync(path.join(cliTarget, 'ai', 'project', 'profile.json')),
+      true
+    );
+    const cliUsage = spawnSync(process.execPath, [path.join(sourceRoot, 'ai', 'install', 'cli.mjs')], {
+      encoding: 'utf8',
+    });
+    check('cli-usage-exit', cliUsage.status ?? 0, 1);
+    const cliSourceRejected = spawnSync(
+      process.execPath,
+      [path.join(sourceRoot, 'ai', 'install', 'cli.mjs'), '--source', sourceRoot, '--target', cliTarget],
+      { encoding: 'utf8' }
+    );
+    check('cli-rejects-source-flag', cliSourceRejected.status ?? 0, 1);
+
+    const nodeProfileRoot = path.join(parent, 'node-profile');
+    write(
+      nodeProfileRoot,
+      'package.json',
+      JSON.stringify({ name: 'plain-node', scripts: { test: 'node --test' } }) + '\n'
+    );
+    write(nodeProfileRoot, 'package-lock.json', '{}\n');
+    install({ sourceRoot, targetRoot: nodeProfileRoot });
+    const generatedNode = generateProfile({ root: nodeProfileRoot });
+    check('generate-node-exit', generatedNode.exit, 0);
+    check('generate-node-wrote', generatedNode.wrote, true);
+    check('generate-node-name', generatedNode.profile.project.name, 'plain-node');
+    check('generate-node-manager', generatedNode.profile.packageManager, 'npm');
+    check('generate-node-command', generatedNode.profile.commands.test, 'npm run test');
+    check('generate-node-branch-unknown', generatedNode.profile.branch.base, 'unknown');
+    check('generate-node-tickets-unknown', generatedNode.profile.tickets.provider, 'unknown');
+    check('generate-node-active-empty', JSON.stringify(generatedNode.profile.activeProfiles), '[]');
+    check(
+      'generate-node-proposed-node',
+      generatedNode.proposedProfiles.some((item) => item.id === 'node'),
+      true
+    );
+    check(
+      'generate-node-writes-markdown',
+      fs.readFileSync(path.join(nodeProfileRoot, 'ai', 'project', 'profile.md'), 'utf8').includes(
+        'generated from repository evidence'
+      ),
+      true
+    );
+
+    const edited = JSON.parse(fs.readFileSync(path.join(nodeProfileRoot, 'ai', 'project', 'profile.json'), 'utf8'));
+    edited.branch.base = 'dev';
+    fs.writeFileSync(path.join(nodeProfileRoot, 'ai', 'project', 'profile.json'), JSON.stringify(edited, null, 2) + '\n');
+    const refused = generateProfile({ root: nodeProfileRoot });
+    check('generate-refuses-edited', refused.exit, 2);
+    check('generate-refuses-wrote', refused.wrote, false);
+    check(
+      'generate-keeps-edit',
+      JSON.parse(fs.readFileSync(path.join(nodeProfileRoot, 'ai', 'project', 'profile.json'), 'utf8')).branch.base,
+      'dev'
+    );
+    const overwritten = generateProfile({ root: nodeProfileRoot, overwrite: true });
+    check('generate-overwrite-exit', overwritten.exit, 0);
+    check('generate-overwrite-restores-unknown-base', overwritten.profile.branch.base, 'unknown');
+
+    const angularProfileRoot = path.join(parent, 'angular-profile');
+    write(
+      angularProfileRoot,
+      'package.json',
+      JSON.stringify({
+        name: 'sample-angular',
+        dependencies: { '@angular/core': '17.3.0' },
+        scripts: { test: 'ng test', lint: 'ng lint' },
+      }) + '\n'
+    );
+    write(angularProfileRoot, 'package-lock.json', '{}\n');
+    write(angularProfileRoot, 'angular.json', '{}\n');
+    install({ sourceRoot, targetRoot: angularProfileRoot });
+    const generatedAngular = generateProfile({ root: angularProfileRoot });
+    check('generate-angular-exit', generatedAngular.exit, 0);
+    check('generate-angular-frameworks', JSON.stringify(generatedAngular.profile.frameworks), '["angular"]');
+    check('generate-angular-active-empty', JSON.stringify(generatedAngular.profile.activeProfiles), '[]');
+    check(
+      'generate-angular-proposed-ts',
+      generatedAngular.proposedProfiles.some((item) => item.id === 'angular-typescript'),
+      true
+    );
+    check(
+      'generate-angular-does-not-propose-node',
+      generatedAngular.proposedProfiles.some((item) => item.id === 'node'),
+      false
+    );
+
+    const ambiguousRoot = path.join(parent, 'ambiguous-profile');
+    write(ambiguousRoot, 'package.json', JSON.stringify({ name: 'no-lock' }) + '\n');
+    install({ sourceRoot, targetRoot: ambiguousRoot });
+    const generatedAmbiguous = generateProfile({ root: ambiguousRoot });
+    check('generate-ambiguous-exit', generatedAmbiguous.exit, 0);
+    check('generate-ambiguous-manager', generatedAmbiguous.profile.packageManager, 'unknown');
+    check('generate-ambiguous-commands', JSON.stringify(generatedAmbiguous.profile.commands), '{}');
+    check('generate-ambiguous-active-empty', JSON.stringify(generatedAmbiguous.profile.activeProfiles), '[]');
+
+    const previewRoot = path.join(parent, 'preview-profile');
+    write(previewRoot, 'package.json', JSON.stringify({ name: 'preview-app' }) + '\n');
+    write(previewRoot, 'package-lock.json', '{}\n');
+    install({ sourceRoot, targetRoot: previewRoot });
+    const previewed = generateProfile({ root: previewRoot, preview: true });
+    check('generate-preview-exit', previewed.exit, 0);
+    check('generate-preview-wrote', previewed.wrote, false);
+    check(
+      'generate-preview-leaves-stub',
+      JSON.parse(fs.readFileSync(path.join(previewRoot, 'ai', 'project', 'profile.json'), 'utf8')).project.name,
+      'unknown'
+    );
+    const previewCli = spawnSync(
+      process.execPath,
+      [path.join(sourceRoot, 'ai', 'discovery', 'generate-profile.mjs'), '--root', previewRoot, '--preview'],
+      { encoding: 'utf8' }
+    );
+    check('generate-preview-cli-exit', previewCli.status ?? 1, 0);
 
     const outsideCwd = path.join(parent, 'outside-cwd');
     fs.mkdirSync(outsideCwd);

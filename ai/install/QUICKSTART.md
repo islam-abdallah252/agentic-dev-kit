@@ -10,12 +10,13 @@ Then, in the other repository:
 
 ```bash
 node ai/discovery/discover.mjs --cli --root . --write-draft ai/project/discovery-report.json
+node ai/discovery/generate-profile.mjs --root .
 node ai/validate.mjs
 ```
 
 `node ai/validate.mjs` validates the repository that contains that script, not the current working directory. From another directory, invoke the consumer’s `ai/validate.mjs` by absolute path, or pass `--root /path/to/repo`.
 
-Review the draft. Edit `ai/project/profile.json` and add `ai/project/profile.md`. Leave unknown values as `unknown`, including `branch.base` until the project's base branch is verified. Do not copy `dev` from the source repository. List a technology profile in `activeProfiles` only when the evidence supports it. Run bootstrap again after adding `angular-typescript`, `angular-html`, or `angular-scss` if you want the matching Cursor rule written from `ai/templates/cursor/`.
+Review and edit `ai/project/profile.json` and `ai/project/profile.md`. Generation copies only verified evidence. Leave unknown values as `unknown`, including `branch.base` until the project's base branch is verified. Do not copy `dev` from the source repository. Proposed technology profiles appear in `profile.md`; add an id to `activeProfiles` only when the evidence supports it. Run bootstrap again after adding `angular-typescript`, `angular-html`, or `angular-scss` if you want the matching Cursor rule written from `ai/templates/cursor/`. Re-running generation without `--overwrite` will not replace a reviewed profile.
 
 `ai/validate.mjs` in a fresh install checks the portable structure and the filled profile. It does not require Jira, Angular, or this repository's branch names. A profile that is still `unknown` fails closed on commit-message validation until you set `commits.headerPattern`.
 

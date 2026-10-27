@@ -1,0 +1,17 @@
+{
+  "name": "agentic-dev-kit",
+  "version": "1.2.0",
+  "private": true,
+  "description": "Portable engineering instructions for AI coding tools",
+  "type": "module",
+  "bin": {
+    "agentic-dev-kit": "./ai/install/cli.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/islam-abdallah252/agentic-dev-kit.git"
+  }
+}

@@ -69,7 +69,7 @@ Tool-specific loading is in `ai/adapters/`.
 
 New repository: `ai/install/QUICKSTART.md`.
 
-First inspection: `ai/discovery/README.md`.
+First inspection: `ai/discovery/README.md`. After install, `node ai/discovery/generate-profile.mjs --root .` writes an initial editable profile from verified evidence only. Review it before use.
 
 ## Known limits
 

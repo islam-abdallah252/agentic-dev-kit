@@ -116,7 +116,7 @@ function materializeCursorAdapters(sourceRoot, targetRoot, conflicts, activeProf
   return copiedAngularProfiles;
 }
 
-function skeletonProfile(version) {
+export function skeletonProfile(version) {
   return {
     coreVersion: version,
     project: { name: 'unknown', type: 'unknown' },
@@ -134,6 +134,9 @@ function skeletonProfile(version) {
     activeProfiles: [],
   };
 }
+
+export const installerProfileDoc =
+  '# Project profile\n\nMachine-readable values are in `ai/project/profile.json`.\n\nFill this file from a reviewed discovery report. Leave unknown facts unknown.\n';
 
 function readCoreVersion(sourceRoot, errors) {
   try {
@@ -180,10 +183,7 @@ export function install({ sourceRoot, targetRoot }) {
   }
   if (!fs.existsSync(profileDocPath)) {
     fs.mkdirSync(path.dirname(profileDocPath), { recursive: true });
-    fs.writeFileSync(
-      profileDocPath,
-      '# Project profile\n\nMachine-readable values are in `ai/project/profile.json`.\n\nFill this file from a reviewed discovery report. Leave unknown facts unknown.\n'
-    );
+    fs.writeFileSync(profileDocPath, installerProfileDoc);
   }
   const reportPath = path.join(targetRoot, 'ai', 'install', 'conflict-report.json');
   const report = {

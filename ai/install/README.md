@@ -16,8 +16,9 @@ See `ai/install/QUICKSTART.md` for the command sequence.
 
 ## What a human still does
 
-- Review discovery and fill the profile
-- Choose `activeProfiles`
+- Run discovery, then `node ai/discovery/generate-profile.mjs --root .` to fill verified fields
+- Review and edit the generated `ai/project/profile.json` and `ai/project/profile.md`
+- Choose `activeProfiles` only when evidence confirms a technology profile
 - Approve commits and pushes
 - Resolve conflicts listed in the install conflict report
 
