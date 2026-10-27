@@ -54,7 +54,7 @@ node ai/discovery/generate-profile.mjs --root .
 node ai/validate.mjs
 ```
 
-Then review and edit `ai/project/profile.json` and `ai/project/profile.md`. Those files are owned by the consumer project. Generation copies verified repository evidence only; it does not guess a base branch, tracker, commit convention, or technology profile.
+Then review and edit `ai/project/profile.json` and `ai/project/profile.md`. Those files are owned by the consumer project. Generation copies verified repository evidence only; it does not guess a tracker, commit convention, or technology profile. `branch.base` comes from the target `origin/HEAD` at install time, or stays `unknown`.
 
 ## What it is
 
@@ -76,7 +76,7 @@ Claude Code is not implemented in this version.
 - `rules/ticket-branch.md`
 - `.codex/agents/`
 - `.cursor/rules/` and `.cursor/agents/` generated from templates. Angular rules are written only when the matching **target** profile is active: `angular-typescript` → `angular-typescript.mdc`, `angular-html` → `ui-html.mdc`, `angular-scss` → `ui-scss.mdc`
-- a skeleton `ai/project/profile.json` only if that file is missing
+- a skeleton `ai/project/profile.json` only if that file is missing. `branch.base` is the target of `refs/remotes/origin/HEAD` when that ref exists; otherwise it is `unknown`. The current checkout is not used, and `main` is not a fallback.
 - a stub `ai/project/profile.md` only if that file is missing
 - `ai/install/conflict-report.json`
 
@@ -97,12 +97,12 @@ node ai/validate.mjs
 What is automatic:
 
 - Discovery reads manifests, lockfiles, and Git facts. It does not write the profile.
-- `generate-profile.mjs` copies **verified** fields into `ai/project/profile.json` and a matching `ai/project/profile.md`. It replaces a missing profile or the installer stub. It never writes `activeProfiles`, `branch.base`, ticket settings, or a commit convention.
+- `generate-profile.mjs` copies **verified** fields into `ai/project/profile.json` and a matching `ai/project/profile.md`. It replaces a missing profile or the installer stub. It keeps an installer-detected `branch.base`. It never writes `activeProfiles`, ticket settings, or a commit convention, and it does not invent a base branch from the current checkout.
 
 What requires review:
 
 - Edit the generated profile before using it as project truth.
-- Leave unknown facts as `unknown`, including `branch.base`. Do not guess `main` or `dev`.
+- Leave unknown facts as `unknown`. If `branch.base` is still `unknown`, do not guess `main` or `dev`. Review an installer-detected value before treating it as project truth.
 - Proposed technology profiles appear in `profile.md`. Add an id to `activeProfiles` only when you confirm it applies.
 - Inferred README signals (such as an issue tracker line) are listed in `profile.md` and are not copied into the JSON.
 
