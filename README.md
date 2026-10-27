@@ -1,6 +1,6 @@
 # Agentic Dev Kit
 
-Portable engineering instructions for AI coding tools. Core version: **1.2.0**.
+Portable engineering instructions for AI coding tools. Core version: **1.3.0**.
 
 This repository is the standalone source of the `ai/` system. It is not an application. Consumer projects keep their own `ai/project/profile.json` and must never receive this kit’s (nonexistent) product configuration, because the kit ships no populated profile.
 
