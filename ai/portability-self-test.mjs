@@ -734,7 +734,6 @@ export function runPortabilitySelfTest(sourceRoot) {
     }
     check('clean-source-has-no-cursor-dir', fs.existsSync(path.join(cleanSource, '.cursor')), false);
     check('clean-source-has-no-cursorrules', fs.existsSync(path.join(cleanSource, '.cursorrules')), false);
-    check('clean-source-has-no-lean-ctx', fs.existsSync(path.join(cleanSource, 'LEAN-CTX.md')), false);
     const cleanValidation = spawnSync(process.execPath, [path.join('ai', 'validate.mjs')], {
       cwd: cleanSource,
       encoding: 'utf8',
@@ -750,7 +749,6 @@ export function runPortabilitySelfTest(sourceRoot) {
     write(cleanSource, '.cursor/rules/figma-implementation-design-qa.mdc', 'local figma rule\n');
     write(cleanSource, '.cursor/rules/git-commit-rules.mdc', 'local git rule\n');
     write(cleanSource, '.cursorrules', 'local\n');
-    write(cleanSource, 'LEAN-CTX.md', 'local\n');
     const cleanTarget = path.join(parent, 'clean-target');
     fs.mkdirSync(cleanTarget);
     const cleanInstall = install({ sourceRoot: cleanSource, targetRoot: cleanTarget });
@@ -767,7 +765,6 @@ export function runPortabilitySelfTest(sourceRoot) {
       false
     );
     check('clean-source-does-not-copy-cursorrules', fs.existsSync(path.join(cleanTarget, '.cursorrules')), false);
-    check('clean-source-does-not-copy-lean-ctx', fs.existsSync(path.join(cleanTarget, 'LEAN-CTX.md')), false);
     check(
       'clean-source-writes-shared-cursor-rule',
       fs.readFileSync(path.join(cleanTarget, '.cursor', 'rules', 'git-and-delivery.mdc'), 'utf8').includes(

@@ -303,6 +303,20 @@ if (!chatgpt.includes(canonicalStatusReference)) {
 if (chatgpt.includes('no open blockers or confirmed defects')) {
   fail('chatgpt adapter weakens the status gate');
 }
+for (const reference of [
+  'ai/core/issue-tracker.md',
+  'ai/core/evidence.md',
+  'ai/project/profile.json',
+  'ai/project/profile.md',
+  'ai/project/SCHEMA.md',
+  'ai/rules/minimal-implementation.md',
+  'ai/rules/testing-and-quality.md',
+  'ai/agents/implementer.md',
+  'ai/agents/code-reviewer.md',
+  'ai/agents/test-engineer.md',
+]) {
+  if (!chatgpt.includes(reference)) fail('chatgpt adapter missing reference ' + reference);
+}
 
 const toolAdapterFiles = [
   'ai/adapters/cursor.md',

@@ -10,7 +10,7 @@ See `ai/install/QUICKSTART.md` for the command sequence.
 
 - Canonical core, agents, adapters, technology profiles, templates, discovery, install, validator, and schema
 - `AGENTS.md`, `rules/ticket-branch.md`, and `.codex/` when those files differ from the destination
-- Cursor rules and agents are written from `ai/templates/cursor/` into the target `.cursor/` directory. The installer does not read or copy a source `.cursor/` directory, `.cursorrules`, or `LEAN-CTX.md`.
+- Cursor rules and agents are written from `ai/templates/cursor/` into the target `.cursor/` directory. The installer does not read or copy a source `.cursor/` directory or `.cursorrules`.
 - Angular Cursor rules are written only when the matching target profile is active: `angular-typescript` → `.cursor/rules/angular-typescript.mdc`, `angular-html` → `ui-html.mdc`, `angular-scss` → `ui-scss.mdc`
 - Not copied: the source project profile, its base branch, its project name, the discovery report, and any machine-local Cursor files
 
