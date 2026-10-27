@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { discover } from './discover.mjs';
-import { installerProfileDoc, skeletonProfile } from '../install/bootstrap.mjs';
+import { detectTargetBaseBranch, installerProfileDoc, skeletonProfile } from '../install/bootstrap.mjs';
 
 function verifiedMap(report) {
   return new Map((report.verified ?? []).map((item) => [item.key, item]));
@@ -72,6 +72,9 @@ export function renderProfileMarkdown(profile, report) {
     const item = verified.get('commands.' + name);
     filled.push('- `commands.' + name + '`: `' + command + '`' + (item ? ' (' + item.evidence + ')' : ''));
   }
+  if (profile.branch?.base && profile.branch.base !== 'unknown') {
+    filled.push('- `branch.base`: `' + profile.branch.base + '` (target refs/remotes/origin/HEAD or existing profile)');
+  }
 
   const unknown = [
     '- `project.type`',
@@ -80,9 +83,9 @@ export function renderProfileMarkdown(profile, report) {
     '- `commits.convention`',
     '- `commits.ticketRequired`',
     '- `commits.headerPattern`',
-    '- `branch.base`',
     '- `activeProfiles` (empty until you add a confirmed id)',
   ];
+  if (!profile.branch?.base || profile.branch.base === 'unknown') unknown.push('- `branch.base`');
   if (profile.project.name === 'unknown') unknown.unshift('- `project.name`');
   if (profile.packageManager === 'unknown') unknown.unshift('- `packageManager`');
 
@@ -140,7 +143,9 @@ function readCoreVersion(root) {
 
 export function isInstallerProfileJson(text, version) {
   try {
-    return JSON.stringify(JSON.parse(text)) === JSON.stringify(skeletonProfile(version));
+    const parsed = JSON.parse(text);
+    if (parsed?.branch && typeof parsed.branch === 'object') parsed.branch.base = 'unknown';
+    return JSON.stringify(parsed) === JSON.stringify(skeletonProfile(version));
   } catch {
     return false;
   }
@@ -156,9 +161,6 @@ export function generateProfile({ root, overwrite = false, preview = false } = {
     return { ok: false, exit: 1, error: 'ai/CORE_VERSION is missing. Install the kit before generating a profile.' };
   }
   const report = discover(root);
-  const profile = profileFromDiscovery(report, version);
-  const markdown = renderProfileMarkdown(profile, report);
-  const jsonText = JSON.stringify(profile, null, 2) + '\n';
   const jsonPath = path.join(root, 'ai', 'project', 'profile.json');
   const mdPath = path.join(root, 'ai', 'project', 'profile.md');
   const jsonExists = fs.existsSync(jsonPath);
@@ -168,6 +170,20 @@ export function generateProfile({ root, overwrite = false, preview = false } = {
   const jsonIsStub = !jsonExists || isInstallerProfileJson(jsonCurrent, version);
   const mdIsStub = !mdExists || isInstallerProfileDoc(mdCurrent);
   const blocked = (jsonExists && !jsonIsStub) || (mdExists && !mdIsStub);
+  const profile = profileFromDiscovery(report, version);
+  let existingBase;
+  try {
+    existingBase = jsonExists ? JSON.parse(jsonCurrent)?.branch?.base : undefined;
+  } catch {
+    existingBase = undefined;
+  }
+  if (!overwrite && typeof existingBase === 'string' && existingBase !== '' && existingBase !== 'unknown') {
+    profile.branch.base = existingBase;
+  } else {
+    profile.branch.base = detectTargetBaseBranch(root);
+  }
+  const markdown = renderProfileMarkdown(profile, report);
+  const jsonText = JSON.stringify(profile, null, 2) + '\n';
 
   const result = {
     ok: true,
