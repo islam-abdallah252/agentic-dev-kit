@@ -1,3 +1,4 @@
+import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -116,7 +117,22 @@ function materializeCursorAdapters(sourceRoot, targetRoot, conflicts, activeProf
   return copiedAngularProfiles;
 }
 
-export function skeletonProfile(version) {
+export function detectTargetBaseBranch(root) {
+  const symbolic = spawnSync('git', ['-C', root, 'symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD'], {
+    encoding: 'utf8',
+  });
+  if (symbolic.error || symbolic.status !== 0) return 'unknown';
+  const ref = String(symbolic.stdout || '').trim();
+  const prefix = 'refs/remotes/origin/';
+  if (!ref.startsWith(prefix)) return 'unknown';
+  const name = ref.slice(prefix.length);
+  if (!name || name === 'HEAD') return 'unknown';
+  const format = spawnSync('git', ['check-ref-format', '--branch', name], { encoding: 'utf8' });
+  if (format.error || format.status !== 0) return 'unknown';
+  return name;
+}
+
+export function skeletonProfile(version, base = 'unknown') {
   return {
     coreVersion: version,
     project: { name: 'unknown', type: 'unknown' },
@@ -129,7 +145,7 @@ export function skeletonProfile(version) {
       bodyRequired: true,
       types: [],
     },
-    branch: { base: 'unknown' },
+    branch: { base },
     commands: {},
     activeProfiles: [],
   };
@@ -175,10 +191,11 @@ export function install({ sourceRoot, targetRoot }) {
   const version = readCoreVersion(sourceRoot, errors);
   const profilePath = path.join(targetRoot, 'ai', 'project', 'profile.json');
   const profileDocPath = path.join(targetRoot, 'ai', 'project', 'profile.md');
+  const branchBase = detectTargetBaseBranch(targetRoot);
   let profileAction = 'left-existing';
   if (version && !fs.existsSync(profilePath)) {
     fs.mkdirSync(path.dirname(profilePath), { recursive: true });
-    fs.writeFileSync(profilePath, JSON.stringify(skeletonProfile(version), null, 2) + '\n');
+    fs.writeFileSync(profilePath, JSON.stringify(skeletonProfile(version, branchBase), null, 2) + '\n');
     profileAction = 'created-unknowns';
   }
   if (!fs.existsSync(profileDocPath)) {
@@ -191,6 +208,7 @@ export function install({ sourceRoot, targetRoot }) {
     conflicts,
     errors,
     profileAction,
+    branchBase,
     overwritten: [],
     rollback: false,
     angularCursorRulesCopied: copiedAngularProfiles,
