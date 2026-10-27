@@ -2,7 +2,7 @@
 
 The portable unit is this `ai/` tree plus the thin platform adapters. There is no runtime dependency beyond Node.js, which is already required to run `ai/validate.mjs`.
 
-`ai/install/bootstrap.mjs` copies the portable paths and writes `ai/project/profile.json` only when that file is absent. The new profile is `unknown` values plus the core version, except `branch.base`: that field is the target of `refs/remotes/origin/HEAD` when that symbolic ref exists and is a valid branch name. If the ref is missing or unusable, `branch.base` stays `unknown`. The installer does not use the current checkout, does not fall back to `main`, and does not copy `ai/project/profile.json` or `ai/project/profile.md` from the source repository. Re-running install leaves an existing profile, including a customized or still-unknown `branch.base`, unchanged.
+`ai/install/bootstrap.mjs` copies the portable paths and writes `ai/project/profile.json` only when that file is absent. The new profile is `unknown` values plus the core version, except `branch.base`: that field is the target of `refs/remotes/origin/HEAD` when that symbolic ref exists and is a valid branch name. If the ref is missing or unusable, `branch.base` stays `unknown`. The installer does not use the current checkout, does not fall back to `main`, and does not copy `ai/project/profile.json` or `ai/project/profile.md` from the source repository. Re-running install leaves an existing profile unchanged, except when `branch.base` is exactly `unknown` and the target now has a valid `origin/HEAD`; only that field is then updated.
 
 See `ai/install/QUICKSTART.md` for the command sequence.
 

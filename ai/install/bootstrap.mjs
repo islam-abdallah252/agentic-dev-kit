@@ -197,6 +197,17 @@ export function install({ sourceRoot, targetRoot }) {
     fs.mkdirSync(path.dirname(profilePath), { recursive: true });
     fs.writeFileSync(profilePath, JSON.stringify(skeletonProfile(version, branchBase), null, 2) + '\n');
     profileAction = 'created-unknowns';
+  } else if (version && branchBase !== 'unknown' && fs.existsSync(profilePath)) {
+    try {
+      const existing = JSON.parse(fs.readFileSync(profilePath, 'utf8'));
+      if (existing?.branch?.base === 'unknown') {
+        existing.branch.base = branchBase;
+        fs.writeFileSync(profilePath, JSON.stringify(existing, null, 2) + '\n');
+        profileAction = 'refreshed-base';
+      }
+    } catch {
+      // leave a malformed profile unchanged
+    }
   }
   if (!fs.existsSync(profileDocPath)) {
     fs.mkdirSync(path.dirname(profileDocPath), { recursive: true });
