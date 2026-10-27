@@ -4,7 +4,7 @@ import path from 'path';
 import { spawnSync } from 'child_process';
 import { discover } from './discovery/discover.mjs';
 import { generateProfile } from './discovery/generate-profile.mjs';
-import { install } from './install/bootstrap.mjs';
+import { detectTargetBaseBranch, install } from './install/bootstrap.mjs';
 import {
   adapterStatesApprovalHardLock,
   classifyCheck,
@@ -32,6 +32,29 @@ function write(root, relative, contents) {
   const file = path.join(root, relative);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, contents);
+}
+
+function git(cwd, args) {
+  return spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: 'kit-test',
+      GIT_AUTHOR_EMAIL: 'kit-test@example.test',
+      GIT_COMMITTER_NAME: 'kit-test',
+      GIT_COMMITTER_EMAIL: 'kit-test@example.test',
+    },
+  });
+}
+
+function initOriginHead(root, defaultBranch, checkoutBranch = 'feature') {
+  fs.mkdirSync(root, { recursive: true });
+  git(root, ['init', '-q']);
+  git(root, ['commit', '--allow-empty', '-q', '-m', 'init']);
+  git(root, ['checkout', '-B', checkoutBranch, '-q']);
+  git(root, ['update-ref', 'refs/remotes/origin/' + defaultBranch, 'HEAD']);
+  git(root, ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/' + defaultBranch]);
 }
 
 const jiraProfile = {
@@ -554,6 +577,87 @@ export function runPortabilitySelfTest(sourceRoot) {
     check('repeated-install-has-no-copy-errors', repeated.errors.length, 0);
     check('repeated-install-keeps-unknown-base', repeatedProfile.branch.base, 'unknown');
     check('repeated-install-leaves-existing-profile', repeated.profileAction, 'left-existing');
+
+    const originMainRoot = path.join(parent, 'origin-head-main');
+    write(originMainRoot, 'README.md', '# app\n');
+    write(originMainRoot, 'package.json', JSON.stringify({ name: 'origin-main-app', scripts: { test: 'node --test' } }) + '\n');
+    write(originMainRoot, 'package-lock.json', '{}\n');
+    initOriginHead(originMainRoot, 'main', 'feature');
+    check(
+      'bootstrap-origin-head-checkout-is-not-base',
+      git(originMainRoot, ['branch', '--show-current']).stdout.trim(),
+      'feature'
+    );
+    const originMainInstall = install({ sourceRoot, targetRoot: originMainRoot });
+    const originMainProfile = JSON.parse(
+      fs.readFileSync(path.join(originMainRoot, 'ai', 'project', 'profile.json'), 'utf8')
+    );
+    check('bootstrap-origin-head-main', originMainProfile.branch.base, 'main');
+    check('bootstrap-origin-head-main-report', originMainInstall.branchBase, 'main');
+    check('bootstrap-origin-head-main-no-ticketless-feature', originMainProfile.branch.ticketlessFeature == null, true);
+    const generatedOriginMain = generateProfile({ root: originMainRoot });
+    check('generate-preserves-origin-head-base', generatedOriginMain.profile.branch.base, 'main');
+    check('generate-origin-head-wrote', generatedOriginMain.wrote, true);
+
+    const originDevRoot = path.join(parent, 'origin-head-dev');
+    write(originDevRoot, 'README.md', '# app\n');
+    initOriginHead(originDevRoot, 'dev', 'feature');
+    const originDevInstall = install({ sourceRoot, targetRoot: originDevRoot });
+    const originDevProfile = JSON.parse(
+      fs.readFileSync(path.join(originDevRoot, 'ai', 'project', 'profile.json'), 'utf8')
+    );
+    check('bootstrap-origin-head-dev', originDevProfile.branch.base, 'dev');
+    check('bootstrap-origin-head-dev-report', originDevInstall.branchBase, 'dev');
+
+    const missingHeadRoot = path.join(parent, 'missing-origin-head');
+    write(missingHeadRoot, 'README.md', '# app\n');
+    git(missingHeadRoot, ['init', '-q']);
+    git(missingHeadRoot, ['commit', '--allow-empty', '-q', '-m', 'init']);
+    const missingHeadInstall = install({ sourceRoot, targetRoot: missingHeadRoot });
+    const missingHeadProfile = JSON.parse(
+      fs.readFileSync(path.join(missingHeadRoot, 'ai', 'project', 'profile.json'), 'utf8')
+    );
+    check('bootstrap-missing-origin-head', missingHeadProfile.branch.base, 'unknown');
+    check('bootstrap-missing-origin-head-report', missingHeadInstall.branchBase, 'unknown');
+    check('detect-missing-origin-head', detectTargetBaseBranch(missingHeadRoot), 'unknown');
+    check('detect-no-git', detectTargetBaseBranch(installed), 'unknown');
+
+    const customBaseRoot = path.join(parent, 'custom-base-reinstall');
+    write(
+      customBaseRoot,
+      'ai/project/profile.json',
+      JSON.stringify({
+        project: { name: 'kept' },
+        branch: { base: 'release', ticketlessFeature: 'feat/<short-kebab-summary>' },
+        activeProfiles: [],
+      }) + '\n'
+    );
+    initOriginHead(customBaseRoot, 'main', 'feature');
+    const customInstall = install({ sourceRoot, targetRoot: customBaseRoot });
+    const customProfile = JSON.parse(
+      fs.readFileSync(path.join(customBaseRoot, 'ai', 'project', 'profile.json'), 'utf8')
+    );
+    check('reinstall-keeps-custom-base', customProfile.branch.base, 'release');
+    check(
+      'reinstall-keeps-ticketless-feature',
+      customProfile.branch.ticketlessFeature,
+      'feat/<short-kebab-summary>'
+    );
+    check('reinstall-custom-base-action', customInstall.profileAction, 'left-existing');
+
+    const unknownKeptRoot = path.join(parent, 'unknown-base-reinstall');
+    write(
+      unknownKeptRoot,
+      'ai/project/profile.json',
+      JSON.stringify({ project: { name: 'kept-unknown' }, branch: { base: 'unknown' } }) + '\n'
+    );
+    initOriginHead(unknownKeptRoot, 'main', 'feature');
+    install({ sourceRoot, targetRoot: unknownKeptRoot });
+    check(
+      'reinstall-does-not-fill-existing-unknown-base',
+      JSON.parse(fs.readFileSync(path.join(unknownKeptRoot, 'ai', 'project', 'profile.json'), 'utf8')).branch.base,
+      'unknown'
+    );
     const installedDiscovery = discover(installed);
     check(
       'installed-tree-does-not-infer-jira-or-angular',
